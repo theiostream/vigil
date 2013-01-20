@@ -4,47 +4,46 @@ import re
 import sys
 import traceback
 
-source_path = sys.argv[1]
+try:
+	source_path = sys.argv[1]
+except IndexError:
+	print "Usage: %s <file>" % sys.argv[0]
+	exit(1)
+
 source_lines = None
+offender_functions = []
 offenders = []
 
+#### --- RUNTIME VIGILANCE
 def punish(line, offense):
     # No double jeopardy.
     for _, _, offend_line in offenders:
         if line == offend_line: return
 
     # Walk back to find the beginning of the function containing this line.
+    match = None
     start = line
+    print start
     while start >= 0:
-        if re.match('def ', source_lines[start]):
-            break
+        #match = re.match(r'^(\s*)def\s+([a-zA-Z0-9_]+)\(\)\s*:', source_lines[start])
+        match = re.match(r'(\s*)def\s+(.+)\(', source_lines[start])
+        if match: break
         start -= 1
 
     # Walk forward to find the end of the function.
+    level = len(match.groups()[0])
     end = line
     while end < len(source_lines):
-        if re.match('^\s*$', source_lines[end]):
-            break
+        if re.match(r'^\s{%d}.+'%level, source_lines[end]): break
         end += 1
 
     # Duly note those functions which hath caused offence.
-    offenders.append((source_lines[start].strip(), offense, line))
+    offenders.append((match.groups()[1], offense, line))
 
     # Clear the lines, but don't delete them. That way later failures will
     # have the right line number.
     for i in xrange(start, end + 1):
         source_lines[i] = ''
-
-def vigil_implore(ok, expr):
-    if not ok:
-        bad_line = traceback.extract_stack()[-3][1]
-        punish(bad_line,
-            "Denied the needs of a function which implored '%s'." % expr)
-
-def vigil_swear(ok, expr):
-    if not ok:
-        bad_line = traceback.extract_stack()[-2][1]
-        punish(bad_line, "Swore '%s' and failed to provide such." % expr)
 
 def vigil_done():
     # Silent vigil if all is well.
@@ -52,43 +51,74 @@ def vigil_done():
         return
 
     # Strip out the dirty impure lines.
-    cleansed = filter(len, source_lines)
+    cleansed = filter(len, source_lines) # This is clever.
     with open(source_path, 'w') as f:
         f.writelines(cleansed)
-
-    print ""
-    print ""
-    print "------------------------------------------------------------------"
-    print ""
+    
+    print "##################################################################"
     print "The ever vigilant watchers of your code have found malfeasance in:"
     print ""
 
     for fn, offense, _ in offenders:
-        print fn
+        print "- " + fn + ":"
         print "Crime:", offense
-        print ""
-
+	
+	print ""
     print "Each has been dealt an appropriate punishment."
+#### END RUNTIME VIGILANCE
+
+#### --- ERROR HANDLERS
+def vigil_implore(ok, expr):
+    if not ok:
+        bad_line = traceback.extract_stack()[-3][1]
+        punish(bad_line, "Denied the needs of a function which implored '%s'." % expr)
+
+def vigil_swear(ok, expr):
+    if not ok:
+        bad_line = traceback.extract_stack()[-2][1]
+        punish(bad_line, "Swore '%s' and failed to provide such." % expr)
 
 def vigil_uncaught():
-    raise_line = traceback.extract_tb(sys.exc_info()[2])[-1][1]
-    print "uncaught error from line ", raise_line
-    punish(raise_line, "Raised '%s' which was not caught." % sys.exc_info()[1])
+    exc_info = sys.exc_info()
+    raise_line = traceback.extract_tb(exc_info[2])[-1][1]
+    punish(raise_line-1, "Caused raise of %s: %s which was not caught in line %d." % (exc_info[0].__name__, exc_info[1], raise_line))
+#### END ERROR HANDLERS
 
-with open(source_path) as f:
-    source_lines = f.readlines()
-
-    source = ""
-    for line in source_lines:
-        line = re.sub(r'(\s*)implore (.*)', r'\1vigil_implore(\2, """\2""")', line)
-        line = re.sub(r'(\s*)swear (.*)', r'\1vigil_swear(\2, """\2""")', line)
-        source += line
-    source += """
+#### --- MAIN
 try:
-    main()
-except Exception as ex:
-    vigil_uncaught()
+	with open(source_path, 'r+') as f:
+		source_lines = f.readlines()
+	
+		source = ""
+		for line in source_lines:
+			line = re.sub(r'(\s*)implore (.*)', r'\1vigil_implore(\2, """\2""")', line)
+			line = re.sub(r'(\s*)swear (.*)', r'\1vigil_swear(\2, """\2""")', line)
+			source += line
+		
+		try:
+			exec(source)
+			print "MAIN!"
+			main()
+			print "WTF!"
+		except NameError as ex:
+			arg = ex.args[0]
+			function_name = re.findall(r"'(.*)'", arg)[0]
+			
+			print function_name
+			if function_name == "main":
+				print "Failure to implement a main() function will result in code erradication."
+				f.seek(0)
+				f.truncate()
+				
+			elif function_name not in offender_functions:
+				vigil_uncaught()
+		except:
+			vigil_uncaught()
+		
+		vigil_done()
+		
+except IOError:
+	print "Failed to open file %s" % source_path
+	exit(1)
 
-vigil_done()
-"""
-    exec(source)
+#### END MAIN
