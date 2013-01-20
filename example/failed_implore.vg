@@ -9,4 +9,8 @@ def square_root(n):
 
     return math.sqrt(abs(n))
 
+def evil_fn():
+    square_root(-1)
 
+def main():
+    evil_fn()
