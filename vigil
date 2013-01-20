@@ -23,7 +23,6 @@ def punish(line, offense):
     # Walk back to find the beginning of the function containing this line.
     match = None
     start = line
-    print start
     while start >= 0:
         #match = re.match(r'^(\s*)def\s+([a-zA-Z0-9_]+)\(\)\s*:', source_lines[start])
         match = re.match(r'(\s*)def\s+(.+)\(', source_lines[start])
@@ -97,9 +96,7 @@ try:
 		
 		try:
 			exec(source)
-			print "MAIN!"
 			main()
-			print "WTF!"
 		except NameError as ex:
 			arg = ex.args[0]
 			function_name = re.findall(r"'(.*)'", arg)[0]
